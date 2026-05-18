@@ -1,59 +1,79 @@
-// === ДЗ 3. Часть 1: CLI-логика (работает в консоли) ===
+// ===== ДЗ 3. Часть 1: CLI-версия (работает в любом окружении) =====
 
 let projects = [];
 
-// Валидация (стрелочная функция)
-const validateProject = (data) => {
+// Валидация (совместимый вариант)
+const validateProject = (data, returnDetails = false) => {
     if (!data.title || data.title.length < 3) {
-        return { valid: false, error: "Название минимум 3 символа" };
+        if (returnDetails) return { valid: false, error: "Название минимум 3 символа" };
+        return false;
     }
     const price = Number(data.price);
     if (isNaN(price) || price < 0) {
-        return { valid: false, error: "Цена должна быть числом >= 0" };
+        if (returnDetails) return { valid: false, error: "Цена должна быть числом >= 0" };
+        return false;
     }
     let skills = [];
     if (data.skills) {
         skills = data.skills.split(",").map(s => s.trim());
     }
-    return { valid: true, skills, price };
+    if (returnDetails) {
+        return { valid: true, skills, price };
+    }
+    return true;
 };
 
-// Добавление проекта (function declaration)
+// Добавление проекта
 function addProject(project) {
     projects.push(project);
-    renderProjectsToDOM();
+    renderProjects(); // CLI-вывод
+    if (typeof renderProjectsToDOM === "function") {
+        renderProjectsToDOM(); // обновляем DOM, если он есть
+    }
+}
+
+// CLI: вывод в консоль
+function renderProjects() {
     console.table(projects);
 }
 
-// Отрисовка карточек в DOM
-function renderProjectsToDOM() {
-    const container = document.getElementById("projects-list");
-    if (!container) return;
+// ===== Часть 2: DOM-версия =====
 
-    container.innerHTML = "";
+// Сбор данных из формы или из prompt
+function collectProjectData(source) {
+    if (source === "form") {
+        return {
+            title: document.getElementById("title")?.value || "",
+            skills: document.getElementById("tech")?.value || "",
+            description: document.getElementById("description")?.value || "",
+            price: document.getElementById("price")?.value || "",
+            link: document.getElementById("link")?.value || ""
+        };
+    }
+    // CLI: сбор через prompt
+    return {
+        title: prompt("Название проекта:"),
+        skills: prompt("Технологии (через запятую):"),
+        description: prompt("Описание:"),
+        price: prompt("Цена:"),
+        link: prompt("Ссылка:")
+    };
+}
 
-    projects.forEach((project, index) => {
-        const card = document.createElement("div");
-        card.className = "project-card";
-        card.innerHTML = `
-            <h4>${escapeHtml(project.title)}</h4>
-            <p>${escapeHtml(project.description || "")}</p>
-            <p><strong>Технологии:</strong> ${escapeHtml(project.skills.join(", "))}</p>
-            <p><strong>Цена:</strong> ${project.price} ₽</p>
-            <a href="${escapeHtml(project.link || "#")}" target="_blank">Проект →</a>
-            <button class="delete-btn" data-index="${index}">🗑 Удалить</button>
-        `;
-        container.appendChild(card);
-    });
-
-    // Обработчики удаления
-    document.querySelectorAll(".delete-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            const idx = btn.dataset.index;
-            projects.splice(idx, 1);
-            renderProjectsToDOM();
-        });
-    });
+// Создание одной карточки
+function createProjectCard(project, index) {
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.dataset.index = index;
+    card.innerHTML = `
+        <h4>${escapeHtml(project.title)}</h4>
+        <p>${escapeHtml(project.description || "")}</p>
+        <p><strong>Технологии:</strong> ${escapeHtml(project.skills.join(", "))}</p>
+        <p><strong>Цена:</strong> ${project.price} ₽</p>
+        <a href="${escapeHtml(project.link || "#")}" target="_blank">Проект →</a>
+        <button class="delete-btn" data-index="${index}">🗑 Удалить</button>
+    `;
+    return card;
 }
 
 function escapeHtml(str) {
@@ -66,82 +86,83 @@ function escapeHtml(str) {
     });
 }
 
-// === DOM-форма ===
-function addProjectForm() {
-    const projectsSection = document.getElementById("projects");
-    if (!projectsSection) return;
+// DOM-отрисовка (перерисовка всего списка)
+function renderProjectsToDOM() {
+    const container = document.getElementById("projects-list");
+    if (!container) return;
 
-    const formHtml = `
-        <div class="form-container">
-            <h3>➕ Добавить проект</h3>
-            <form id="project-form">
-                <input type="text" id="title" placeholder="Название проекта" required>
-                <input type="text" id="tech" placeholder="Технологии (через запятую)" required>
-                <textarea id="description" placeholder="Описание"></textarea>
-                <input type="text" id="price" placeholder="Цена (руб)" required>
-                <input type="text" id="link" placeholder="Ссылка (необязательно)">
-                <button type="submit">Добавить</button>
-            </form>
-        </div>
-    `;
+    if (projects.length === 0) {
+        container.innerHTML = '<p class="empty-message">📭 Пока нет проектов. Добавьте первый!</p>';
+        return;
+    }
 
-    projectsSection.insertAdjacentHTML("afterend", formHtml);
+    container.innerHTML = "";
+    projects.forEach((project, idx) => {
+        container.appendChild(createProjectCard(project, idx));
+    });
 
-    const form = document.getElementById("project-form");
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const title = document.getElementById("title").value;
-        const skills = document.getElementById("tech").value;
-        const description = document.getElementById("description").value;
-        const price = document.getElementById("price").value;
-        const link = document.getElementById("link").value;
-
-        const validation = validateProject({ title, skills, description, price, link });
-
-        if (validation.valid) {
-            const newProject = {
-                title,
-                link: link || "#",
-                skills: validation.skills,
-                description,
-                price: validation.price
-            };
-            addProject(newProject);
-            form.reset();
-        } else {
-            alert("❌ Ошибка: " + validation.error);
-        }
+    // Делегирование удаления
+    document.querySelectorAll(".delete-btn").forEach(btn => {
+        btn.removeEventListener("click", handleDelete);
+        btn.addEventListener("click", handleDelete);
     });
 }
 
-// === Запуск после загрузки страницы ===
-document.addEventListener("DOMContentLoaded", () => {
-    addProjectForm();
-    console.log("✅ ДЗ 3: CLI и DOM работают. Используй форму для добавления проектов.");
-});
+function handleDelete(e) {
+    const idx = e.currentTarget.dataset.index;
+    projects.splice(idx, 1);
+    renderProjectsToDOM();
+}
 
-// === CLI-часть для консоли (можно вызывать вручную) ===
-window.runCLI = function() {
-    const title = prompt("Название проекта:");
-    if (!title) return;
-    const skills = prompt("Технологии (через запятую):");
-    const description = prompt("Описание:");
-    const price = prompt("Цена:");
-    const link = prompt("Ссылка:");
+// Добавление проекта через форму
+function addProjectFromForm(e) {
+    e.preventDefault();
+    const data = collectProjectData("form");
+    const validation = validateProject(data, true);
 
-    const validation = validateProject({ title, skills, description, price, link });
     if (validation.valid) {
         addProject({
-            title,
-            link: link || "#",
+            title: data.title,
+            link: data.link || "#",
             skills: validation.skills,
-            description,
+            description: data.description,
             price: validation.price
         });
+        document.getElementById("add-project-form")?.reset();
     } else {
-        alert(validation.error);
+        alert("❌ Ошибка: " + validation.error);
     }
-};
+}
 
-console.log("Для запуска CLI-версии введи в консоли: runCLI()");
+// CLI-цикл
+function runCLI() {
+    while (true) {
+        const data = collectProjectData("cli");
+        if (!data.title) {
+            console.log("Выход из CLI-режима");
+            break;
+        }
+        const validation = validateProject(data, true);
+        if (validation.valid) {
+            addProject({
+                title: data.title,
+                link: data.link || "#",
+                skills: validation.skills,
+                description: data.description,
+                price: validation.price
+            });
+        } else {
+            console.error("❌ Ошибка:", validation.error);
+        }
+    }
+}
+
+// Инициализация DOM
+document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("add-project-form");
+    if (form) {
+        form.addEventListener("submit", addProjectFromForm);
+    }
+    renderProjectsToDOM();
+    console.log("✅ ДЗ 3 загружено. Для запуска CLI введи runCLI()");
+});
